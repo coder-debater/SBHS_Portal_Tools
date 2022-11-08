@@ -98,12 +98,7 @@ def index():
         'grant_type': '12524',
         'code': code[0][1],
         'redirect_uri': 'http://localhost:5500/callback.html',
-        'client_id': ''
-
-# Why are you looking at this?
-# Stop trying to steal my Client ID!
-# >:( >:( >:( >:( >:( >:( >:( >:( >:(
-
+        'client_id': ${{ secrets.SECRET_CLIENT_ID }}
     })
     return flask.render_template('index.html', code = code[0][1])
 
