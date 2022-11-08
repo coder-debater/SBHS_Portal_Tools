@@ -65,9 +65,7 @@ cal.add(Event(
     end = datetime(2022, 10, 31, 15, 15),
     rrday = 'Monday'
 ))
-
 # ========== SEP ========== #
-
 cal = Calendar('2.0')
 cal.add_class("Halloween", "Mr. T Rick and Mr. T Reat", 666, DT(2022, 10, 31), TD(hours = 9), TD(hours = 15, minutes = 15))
 cal.add_classes([
@@ -75,13 +73,15 @@ cal.add_classes([
     ("Halloween + 2", "Teacher #2", 6662, DT(2022, 11, 2), TD(hours = 9), TD(hours = 15, minutes = 15)),
     ("Halloween + 3", "Teacher #3", 6663, DT(2022, 11, 3), TD(hours = 9), TD(hours = 15, minutes = 15))
 ])
-
 cal.write_to('aaa.ics')
 """
 
 app = flask.Flask('Portal to ICS')
 
 code = [(True, secrets.token_hex())]
+
+def _reset():
+    code[0] = (True, secrets.token_hex())
 
 @app.route('/')
 def index():
@@ -112,12 +112,12 @@ def callback():
     if code[0][1] == flask.request.args.get('state'):
         code[0] = (False, flask.request.args.get('code'))
     else:
-        code[0] = (True, secrets.token_hex())
+        _reset()
     return flask.redirect('/')
 
 @app.route('/reset')
 def reset():
-    code[0] = (True, secrets.token_hex())
+    _reset()
     return flask.redirect('/')
 
 app.run(host = '127.0.0.1', port = 5500)
