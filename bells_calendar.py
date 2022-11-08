@@ -1,4 +1,5 @@
 from datetime import datetime as DT, timedelta as TD
+import webbrowser
 import flask
 import secrets
 import requests
@@ -55,36 +56,43 @@ class Calendar(object):
 
 app = flask.Flask('Portal to ICS')
 
-code = [(True, secrets.token_hex())]
+secret = [secrets.token_hex()]
+nocode = [True]
+code = [None]
 
-_CLIENT_ID = [input("Client ID: ")]
+CLIENT_ID, CLIENT_SECRET = input("Client ID: "), input("Client secret:")
 
 def _reset():
-    code[0] = (True, secrets.token_hex())
+    secret[0] = secrets.token_hex()
+    nocode[0] = True
 
 @app.route('/')
 def index():
-    if code[0][0]:
-        return flask.redirect(''.join([
-            "https://student.sbhs.net.au/api/authorize"
-            "?response_type=code&client_id=dinnerjacket_plus&scope=all-ro&state=",
-            code[0][1]
-        ]))
+    if nocode[0]:
+        return flask.redirect(
+f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={CLIENT_ID}&scope=all-ro&state={secret[0]}")
     resp = requests.post(
         "https://" "student.sbhs"
         ".net.au/api/token", data = {
-            'grant_type': '?', # ! ===== TODO ===== ! #
-            'code': code[0][1],
+            'grant_type': "authorization_code",
+            'code': code[0],
+            'client_id': CLIENT_ID,
+            'client_secret': CLIENT_SECRET,
             'redirect_uri': 'http://localhost:5500/callback.html',
-            'client_id': _CLIENT_ID[0]
+            'code_verifier': secret[0],
+        }, headers = {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
     )
-    return flask.render_template('index.html', code = code[0][1])
+    access_token = resp.json()['access_token']
+    print(access_token)
+    return flask.render_template('index.html')
 
 @app.route('/callback.html')
 def callback():
-    if code[0][1] == flask.request.args.get('state'):
-        code[0] = (False, flask.request.args.get('code'))
+    if secret[0] == flask.request.args.get('state'):
+        nocode[0] = False
+        code[0] = flask.request.args.get('code')
     else:
         _reset()
     return flask.redirect('/')
@@ -94,4 +102,5 @@ def reset():
     _reset()
     return flask.redirect('/')
 
+webbrowser.open('http://localhost:5500/')
 app.run(host = '127.0.0.1', port = 5500)
