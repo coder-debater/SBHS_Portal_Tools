@@ -55,52 +55,91 @@ class Calendar(object):
             file.write(r)
 
 app = flask.Flask('Portal to ICS')
+PORT = 5050
+MAIN = f"http://localhost:{PORT}/"
 
-secret = [secrets.token_hex()]
-nocode = [True]
+client_id = [None]
+client_secret = [None]
 code = [None]
+state = [None]
 
-CLIENT_ID, CLIENT_SECRET = input("Client ID: "), input("Client secret:")
+def auth():
+    return flask.redirect(
+        "https://"
+        "student.sbhs.net.au/api/authorize"
+        "?response_type=code&scope=all-ro"
+        f"&client_id={client_id[0]}"
+        f"&state={state[0]}"
+    )
 
-def _reset():
-    secret[0] = secrets.token_hex()
-    nocode[0] = True
-
-@app.route('/')
-def index():
-    if nocode[0]:
-        return flask.redirect(
-f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={CLIENT_ID}&scope=all-ro&state={secret[0]}")
-    resp = requests.post(
+def callback():
+    access_token = requests.post(
         "https://" "student.sbhs"
         ".net.au/api/token", data = {
             'grant_type': "authorization_code",
+            'redirect_uri': MAIN,
+            'client_id': client_id[0],
+            'client_secret': client_secret[0],
             'code': code[0],
-            'client_id': CLIENT_ID,
-            'client_secret': CLIENT_SECRET,
-            'redirect_uri': 'http://localhost:5500/callback.html',
-            'code_verifier': secret[0],
+            'code_verifier': state[0],
         }, headers = {
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
-    )
-    access_token = resp.json()['access_token']
-    print(access_token)
-    return flask.render_template('index.html')
+    ).json()['access_token']
+    print('Access token: ', access_token)
+    return 'ics file here'
 
-@app.route('/callback.html')
-def callback():
-    if secret[0] == flask.request.args.get('state'):
-        nocode[0] = False
+def index():
+    return f"""<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal to ICS</title></head>
+
+<body><form action="/" method="POST"><fieldset>
+
+
+
+<legend>Create an app, then fill in this form</legend>
+Choose any name, and any app ID. <br>
+
+Set your Redirect URI and website address to
+<input value="{MAIN}" readonly>
+<br>
+
+GitHub repo:
+<input value="https://github.com/wensenfriendandextra/Portal-to-ICS" readonly>
+
+<br><br><br><label for="client_id">App ID:</label>
+<input type="text" id="client_id" name="client_id" placeholder="My Amazing App" required><br><br>
+<label for="client_secret">App Secret:</label>
+<input type="password" id="client_secret" name="client_secret" placeholder="(shh!)" required>
+
+<br><br><br><input type="submit" value="Generate my ICS!">
+
+
+
+</fieldset></form></body></html>"""
+
+@app.route('/', methods = ['GET', 'POST'])
+def root():
+    if flask.request.method == "POST":
+        client_id[0] = flask.request.form.get('client_id')
+        client_secret[0] = flask.request.form.get('client_secret')
+        state[0] = secrets.token_urlsafe()
+        return auth()
+    elif flask.request.args.get('code') and flask.request.args.get('state'):
+        if state[0] != flask.request.args.get('state'):
+            raise RuntimeError("state was changed")
         code[0] = flask.request.args.get('code')
-    else:
-        _reset()
-    return flask.redirect('/')
+        return flask.redirect(MAIN)
+    elif flask.request.args.get('state'):
+        if state[0] != flask.request.args.get('state'):
+            return flask.redirect(MAIN)
+        return auth()
+    elif code[0]:
+        return callback()
+    return index()
 
-@app.route('/reset')
-def reset():
-    _reset()
-    return flask.redirect('/')
-
-webbrowser.open('http://localhost:5500/')
-app.run(host = '127.0.0.1', port = 5500)
+webbrowser.open(MAIN)
+app.run(host = '127.0.0.1', port = PORT)
