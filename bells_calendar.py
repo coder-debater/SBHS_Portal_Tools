@@ -1,4 +1,6 @@
+import base64
 from datetime import datetime as DT, timedelta as TD
+import hashlib
 import webbrowser
 import flask
 import secrets
@@ -47,46 +49,62 @@ class Calendar(object):
             "DTSTAMP": start,
             "RRULE": f"FREQ=WEEKLY;INTERVAL=3;BYDAY={formatted}"
         }))
-    def add_classes(self, classes):
-        for class_info in classes: self.add_class(*class_info)
-    def write_to(self, filename, mode = 'w'):
-        r = repr(self)
-        with open(filename, mode) as file:
-            file.write(r)
+    # def add_classes(self, classes):
+    #     for class_info in classes: self.add_class(*class_info)
+    # def write_to(self, filename, mode = 'w'):
+    #     r = repr(self)
+    #     with open(filename, mode) as file:
+    #         file.write(r)
 
 app = flask.Flask('Portal to ICS')
 PORT = 5050
 MAIN = f"http://localhost:{PORT}/"
 
 client_id = [None]
-client_secret = [None]
-code = [None]
+# client_secret = [None]
+auth_code = [None]
+code_verifier = [None]
+code_challenge = [None]
 state = [None]
 
+def gen_code_challenge():
+    code_verifier[0] = secrets.token_urlsafe(100)[:(secrets.randbelow(64)+64)]
+    code_challenge[0] = base64.b64encode(
+        hashlib.sha256(code_verifier[0]).digest()
+    ).replace(
+        b'+', b'-'
+    ).replace(
+        b'/', b'_'
+    ).strip(b'=')
+
 def auth():
+    gen_code_challenge()
     return flask.redirect(
-        "https://"
-        "student.sbhs.net.au/api/authorize"
-        "?response_type=code&scope=all-ro"
-        f"&client_id={client_id[0]}"
-        f"&state={state[0]}"
+        f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={client_id[0]}&redirect_uri={MAIN}&state={state[0]}&code_challenge={code_challenge[0]}&code_challenge_method=S256&scope=all-ro"
     )
 
 def callback():
     access_token = requests.post(
-        "https://" "student.sbhs"
-        ".net.au/api/token", data = {
-            'grant_type': "authorization_code",
-            'redirect_uri': MAIN,
-            'client_id': client_id[0],
-            'client_secret': client_secret[0],
-            'code': code[0],
-            'code_verifier': state[0],
-        }, headers = {
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        }
-    ).json()['access_token']
+        "https://student.sbhs.net.au/api/token",
+    data = {
+        'grant_type': "authorization_code",
+        'code': auth_code[0],
+        'redirect_uri': MAIN,
+        'code_verifier': code_verifier[0],
+        'code_challenge': code_challenge[0],
+        # 'client_id': client_id[0],
+        # 'client_secret': client_secret[0],
+    }, headers = {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+    }).json()
     print('Access token: ', access_token)
+    access_token = access_token['access_token']
+    timetable = requests.get(
+        "https://student.sbhs.net.au/api/timetable/timetable.json",
+    headers = {
+        'Authorisation': "".join(["Bearer ", access_token]),
+    }).content
+    print('Timetable: ', timetable)
     return 'ics file here'
 
 def index():
@@ -112,8 +130,10 @@ GitHub repo:
 
 <br><br><br><label for="client_id">App ID:</label>
 <input type="text" id="client_id" name="client_id" placeholder="My Amazing App" required><br><br>
+<!--
 <label for="client_secret">App Secret:</label>
 <input type="password" id="client_secret" name="client_secret" placeholder="(shh!)" required>
+-->
 
 <br><br><br><input type="submit" value="Generate my ICS!">
 
@@ -125,19 +145,19 @@ GitHub repo:
 def root():
     if flask.request.method == "POST":
         client_id[0] = flask.request.form.get('client_id')
-        client_secret[0] = flask.request.form.get('client_secret')
+        # client_secret[0] = flask.request.form.get('client_secret')
         state[0] = secrets.token_urlsafe()
         return auth()
     elif flask.request.args.get('code') and flask.request.args.get('state'):
         if state[0] != flask.request.args.get('state'):
             raise RuntimeError("state was changed")
-        code[0] = flask.request.args.get('code')
+        auth_code[0] = flask.request.args.get('code')
         return flask.redirect(MAIN)
     elif flask.request.args.get('state'):
         if state[0] != flask.request.args.get('state'):
             return flask.redirect(MAIN)
         return auth()
-    elif code[0]:
+    elif auth_code[0]:
         return callback()
     return index()
 
