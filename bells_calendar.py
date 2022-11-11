@@ -61,51 +61,30 @@ PORT = 5050
 MAIN = f"http://localhost:{PORT}/"
 
 client_id = [None]
-# client_secret = [None]
+client_secret = [None]
 auth_code = [None]
-code_verifier = [None]
-code_challenge = [None]
 state = [None]
-
-def gen_code_challenge():
-    code_verifier[0] = secrets.token_urlsafe(100)[:(secrets.randbelow(64)+64)]
-    code_challenge[0] = base64.b64encode(
-        hashlib.sha256(code_verifier[0]).digest()
-    ).replace(
-        b'+', b'-'
-    ).replace(
-        b'/', b'_'
-    ).strip(b'=')
+access_token = [None]
 
 def auth():
-    gen_code_challenge()
+    state[0] = secrets.token_urlsafe()
     return flask.redirect(
-        f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={client_id[0]}&redirect_uri={MAIN}&state={state[0]}&code_challenge={code_challenge[0]}&code_challenge_method=S256&scope=all-ro"
+        f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={client_id[0]}&redirect_uri={MAIN}&state={state[0]}&scope=all-ro"
     )
 
-def callback():
-    access_token = requests.post(
+def get_access_token():
+    token = requests.post(
         "https://student.sbhs.net.au/api/token",
     data = {
         'grant_type': "authorization_code",
         'code': auth_code[0],
         'redirect_uri': MAIN,
-        'code_verifier': code_verifier[0],
-        'code_challenge': code_challenge[0],
-        # 'client_id': client_id[0],
-        # 'client_secret': client_secret[0],
+        'client_id': client_id[0],
+        'client_secret': client_secret[0],
     }, headers = {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
     }).json()
-    print('Access token: ', access_token)
-    access_token = access_token['access_token']
-    timetable = requests.get(
-        "https://student.sbhs.net.au/api/timetable/timetable.json",
-    headers = {
-        'Authorisation': "".join(["Bearer ", access_token]),
-    }).content
-    print('Timetable: ', timetable)
-    return 'ics file here'
+    access_token[0] = token['access_token']
 
 def index():
     return f"""<!DOCTYPE html><html lang="en"><head>
@@ -130,10 +109,8 @@ GitHub repo:
 
 <br><br><br><label for="client_id">App ID:</label>
 <input type="text" id="client_id" name="client_id" placeholder="My Amazing App" required><br><br>
-<!--
 <label for="client_secret">App Secret:</label>
 <input type="password" id="client_secret" name="client_secret" placeholder="(shh!)" required>
--->
 
 <br><br><br><input type="submit" value="Generate my ICS!">
 
@@ -145,8 +122,7 @@ GitHub repo:
 def root():
     if flask.request.method == "POST":
         client_id[0] = flask.request.form.get('client_id')
-        # client_secret[0] = flask.request.form.get('client_secret')
-        state[0] = secrets.token_urlsafe()
+        client_secret[0] = flask.request.form.get('client_secret')
         return auth()
     elif flask.request.args.get('code') and flask.request.args.get('state'):
         if state[0] != flask.request.args.get('state'):
@@ -157,8 +133,22 @@ def root():
         if state[0] != flask.request.args.get('state'):
             return flask.redirect(MAIN)
         return auth()
+    elif flask.request.args.get('reset'):
+        client_id[0] = None
+        client_secret[0] = None
+        auth_code[0] = None
+        state[0] = None
+        access_token[0] = None
     elif auth_code[0]:
-        return callback()
+        get_access_token()
+    if access_token[0]:
+        timetable = requests.get(
+            "https://student.sbhs.net.au/api/timetable/timetable.json",
+        headers = {
+            'Authorization': "".join(["Bearer ", access_token]),
+        }).json()
+        print('Timetable: ', timetable)
+        return 'ics file here'
     return index()
 
 webbrowser.open(MAIN)
