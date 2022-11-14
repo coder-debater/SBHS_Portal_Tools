@@ -1,6 +1,6 @@
-import base64
 from datetime import datetime as DT, timedelta as TD
-import hashlib
+import json
+import multiprocessing
 import webbrowser
 import flask
 import secrets
@@ -56,6 +56,7 @@ class Calendar(object):
     #     with open(filename, mode) as file:
     #         file.write(r)
 
+flask.cli.show_server_banner = lambda *x: None
 app = flask.Flask('Portal to ICS')
 PORT = 5050
 MAIN = f"http://localhost:{PORT}/"
@@ -73,7 +74,7 @@ def auth():
     )
 
 def get_access_token():
-    token = requests.post(
+    access_token[0] = requests.post(
         "https://student.sbhs.net.au/api/token",
     data = {
         'grant_type': "authorization_code",
@@ -83,8 +84,7 @@ def get_access_token():
         'client_secret': client_secret[0],
     }, headers = {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    }).json()
-    access_token[0] = token['access_token']
+    }).json()['access_token']
 
 def index():
     return f"""<!DOCTYPE html><html lang="en"><head>
@@ -117,39 +117,59 @@ GitHub repo:
 
 
 </fieldset></form></body></html>"""
-
 @app.route('/', methods = ['GET', 'POST'])
+@app.route('/app', methods = ['GET', 'POST'])
+@app.route('/app/', methods = ['GET', 'POST'])
+@app.route('/app.html', methods = ['GET', 'POST'])
+@app.route('/callback', methods = ['GET', 'POST'])
+@app.route('/callback/', methods = ['GET', 'POST'])
+@app.route('/callback.html', methods = ['GET', 'POST'])
+@app.route('/wensen', methods = ['GET', 'POST'])
+@app.route('/wensen/', methods = ['GET', 'POST'])
+@app.route('/wensen.html', methods = ['GET', 'POST'])
+@app.route('/derivative/of/x/squared/is/two/x', methods = ['GET', 'POST'])
+@app.route('/derivative/of/x/squared/is/two/x/', methods = ['GET', 'POST'])
+@app.route('/derivative/of/x/squared/is/two/x.html', methods = ['GET', 'POST'])
 def root():
     if flask.request.method == "POST":
+        # Form submitted
         client_id[0] = flask.request.form.get('client_id')
         client_secret[0] = flask.request.form.get('client_secret')
         return auth()
-    elif flask.request.args.get('code') and flask.request.args.get('state'):
-        if state[0] != flask.request.args.get('state'):
-            raise RuntimeError("state was changed")
-        auth_code[0] = flask.request.args.get('code')
+    elif (( flask.request.args.get('state')) and
+          ( flask.request.args.get('state') != state[0])):
+        # Wrong state
         return flask.redirect(MAIN)
-    elif flask.request.args.get('state'):
-        if state[0] != flask.request.args.get('state'):
-            return flask.redirect(MAIN)
+    elif flask.request.args.get('code'):
+        # Authenticated
+        auth_code[0] = flask.request.args.get('code')
+        get_access_token()
+        return flask.redirect(MAIN)
+    elif (
+        flask.request.args.get('state') or
+        flask.request.args.get('error')):
+        # Denied, re-authenticate
         return auth()
     elif flask.request.args.get('reset'):
-        client_id[0] = None
-        client_secret[0] = None
-        auth_code[0] = None
-        state[0] = None
-        access_token[0] = None
-    elif auth_code[0]:
-        get_access_token()
-    if access_token[0]:
-        timetable = requests.get(
+        # RESET EVERYTHING!!!!!!!
+        client_id[0] = client_secret[0] = auth_code[0] = state[0] = access_token[0] = None
+        return flask.redirect(MAIN)
+    elif access_token[0]:
+        # Yay timetable :D
+        obj = json.loads(requests.get(
             "https://student.sbhs.net.au/api/timetable/timetable.json",
         headers = {
-            'Authorization': "".join(["Bearer ", access_token]),
-        }).json()
-        print('Timetable: ', timetable)
-        return 'ics file here'
+            'Authorization': f"Bearer {access_token[0]}",
+        }).content)
+        with open('aaa.txt', 'w') as file:
+            file.write(repr(obj))
+        return 'ok'
+    # Normal access
     return index()
+
+@app.errorhandler(404)
+def handle_404(e):
+    return flask.redirect(MAIN)
 
 webbrowser.open(MAIN)
 app.run(host = '127.0.0.1', port = PORT)
