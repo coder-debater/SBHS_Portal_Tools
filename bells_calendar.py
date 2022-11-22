@@ -1,6 +1,5 @@
 from datetime import datetime as DT, timedelta as TD
 import json
-import multiprocessing
 import webbrowser
 import flask
 import secrets
@@ -156,14 +155,20 @@ def root():
         return flask.redirect(MAIN)
     elif access_token[0]:
         # Yay timetable :D
-        obj = json.loads(requests.get(
+        days = json.loads(requests.get(
+            "https://student.sbhs.net.au/api/calendar/days.json"
+        ).content)
+        timetable = json.loads(requests.get(
             "https://student.sbhs.net.au/api/timetable/timetable.json",
         headers = {
             'Authorization': f"Bearer {access_token[0]}",
         }).content)
-        with open('aaa.txt', 'w') as file:
-            file.write(repr(obj))
-        return 'ok'
+        days = timetable['days']
+        if isinstance(days, dict):
+            days = days.values()
+        for day in days:
+            print(day)
+        return 'ICS here'
     # Normal access
     return index()
 
