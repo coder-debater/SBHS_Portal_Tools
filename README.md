@@ -1,4 +1,3 @@
-# Portal-to-ICS
-SBHS Student [Portal to ICS][1]
-
- [1]: https://wensenfriendandextra.github.io/Portal-to-ICS/bells_calendar.py
+# SBHS Portal Tools
+It's exactly what it sounds like
+._..
