@@ -1,3 +1,4 @@
+import typing
 import webbrowser
 import flask
 import secrets
@@ -11,11 +12,12 @@ PORT = 5555
 app = flask.Flask('Token Playground')
 MAIN = f"http://localhost:{PORT}/"
 
-client_id = [None]
-client_secret = [None]
-auth_code = [None]
-state = [None]
-access_token = [None]
+OptionalList = list[typing.Any | None]
+client_id: OptionalList = [None]
+client_secret: OptionalList = [None]
+auth_code: OptionalList = [None]
+state: OptionalList = [None]
+access_token: OptionalList = [None]
 
 def auth():
     state[0] = secrets.token_urlsafe()

@@ -1,6 +1,6 @@
-from copy import deepcopy
 from datetime import datetime as DT, timedelta as TD
 import json
+import typing
 import webbrowser
 import flask
 import secrets
@@ -13,7 +13,7 @@ class Calendar(object):
             self.version = version
         self._sub = subcomponents or []
     def _attrs_repr(self):
-        return [':'.join([k, v]) for k, v in self._attrs.items()]
+        return [':'.join([k, v]) for k, v in self._attrs.items() if v is not None]
     def __repr__(self):
         return '\n'.join([
             f"BEGIN:VCALENDAR",
@@ -60,11 +60,13 @@ app = flask.Flask('Portal to ICS')
 PORT = 5050
 MAIN = f"http://localhost:{PORT}/"
 
-client_id = [None]
-client_secret = [None]
-auth_code = [None]
-state = [None]
-access_token = [None]
+OptionalList = list[typing.Any | None]
+client_id: OptionalList = [None]
+client_secret: OptionalList = [None]
+auth_code: OptionalList = [None]
+state: OptionalList = [None]
+access_token: OptionalList = [None]
+generated: list[bool] = [False]
 
 def auth():
     state[0] = secrets.token_urlsafe()
@@ -171,94 +173,74 @@ def root():
         return flask.redirect(MAIN)
     elif access_token[0]:
         # Yay timetable :D
+        if generated[0]:
+            return "Already generated"
+        generated[0] = True
         calendar = Calendar('2.0')
         now = DT.now()
         curr_day = DT(year = int(now.year), month = int(now.month), day = int(now.day))
         day = TD(days = 1)
+        curr_day -= day
         for _ in range(21):
-            mm = str(curr_day.month).zfill(2)
-            dd = str(curr_day.day).zfill(2)
-            sign = -1
-            curr = 0
-            new_curr = deepcopy(curr_day)
-            while True:
-                sign *= -1
-                curr += 21
-                new_curr += sign * curr * day
-                try:
-                    content = requests.get(''.join([
-                        "https://student.sbhs.net.au",
-                        "/api/timetable/daytimetable.json",
-                        "?date=",
-                        str(new_curr.year),
-                        "-",
-                        mm,
-                        "-",
-                        dd
-                    ]), headers = {
-                        'Authorization': f"Bearer {access_token[0]}",
-                    }).content
-                    if not content:
-                        break
-                    timetable = json.loads(content)
-                    if not timetable:
-                        continue
-                    bells = timetable.get('bells', timetable.get('bell', None))
-                    if not bells:
-                        continue
-                    timetable_classes = timetable.get('timetable', None)
-                    if not timetable_classes:
-                        continue
-                    daytimetable = timetable_classes.get('timetable', None)
-                    if not daytimetable:
-                        continue
-                    periods = daytimetable.get('periods', None)
-                    if not periods:
-                        continue
-                    classes = timetable_classes.get('subjects', timetable_classes.get('classes', None))
-                    if not classes:
-                        continue
-                    if isinstance(bells, dict):
-                        bells = bells.values()
-                    bells = {v['period']: v for v in bells}
-                    if not isinstance(periods, dict):
-                        break
-                    for name, info in periods.items():
-                        bell = bells.get(str(name), None)
-                        if bell is None:
-                            bell = bells[int(name)]
-                        start = parseTime(
-                            bell.get('startTime',
-                            bell.get('start',
-                            bell.get('time', None)))
-                        )
-                        end = parseTime(
-                            bell.get('endTime',
-                            bell.get('end', None))
-                        )
-                        if ((end - start) >= TD(minutes = 10)):
-                            short_title = info['title']
-                            possible_class_key = ''.join([info['year'], short_title])
-                            possible_class = classes.get(short_title, None)
-                            this_class = classes.get(possible_class_key, possible_class)
-                            class_name = this_class.get('title', this_class.get('longTitle', None))
-                            teacher = this_class.get('fullTeacher', this_class.get('teacher', None))
-                            calendar.add_class(
-                                class_name,
-                                teacher,
-                                info['room'],
-                                new_curr,
-                                start,
-                                end
-                            )
-                            input("Class added")
-                    print("All classes added", new_curr)
+            curr_day += day
+            try:
+                content = requests.get(''.join([
+                    "https://student.sbhs.net.au",
+                    "/api/timetable/daytimetable.json",
+                    "?date=",
+                    str(curr_day.year),
+                    "-",
+                    str(curr_day.month).zfill(2),
+                    "-",
+                    str(curr_day.day).zfill(2)
+                ]), headers = {
+                    'Authorization': f"Bearer {access_token[0]}",
+                }).content
+                print(len(content))
+                timetable = json.loads(content)
+                bells = timetable.get('bells', timetable.get('bell', None))
+                if not bells:
+                    continue
+                timetable_classes = timetable['timetable']
+                daytimetable = timetable_classes['timetable']
+                periods = daytimetable['periods']
+                classes = timetable_classes.get('subjects', timetable_classes.get('classes', None))
+                if isinstance(bells, dict):
+                    bells = bells.values()
+                bells = {v['period']: v for v in bells}
+                if not isinstance(periods, dict):
                     break
-                except Exception:
-                    if curr == 210:
-                        # checked 10ish times, continue then
-                        break
-            curr_day = curr_day + day
+                for name, info in periods.items():
+                    bell = bells.get(str(name), None)
+                    if bell is None:
+                        bell = bells[int(name)]
+                    start = parseTime(
+                        bell.get('startTime',
+                        bell.get('start',
+                        bell.get('time', None)))
+                    )
+                    end = parseTime(
+                        bell.get('endTime',
+                        bell.get('end', None))
+                    )
+                    if ((end - start) >= TD(minutes = 10)):
+                        short_title = info['title']
+                        possible_class_key = ''.join([info['year'], short_title])
+                        possible_class = classes.get(short_title, None)
+                        this_class = classes.get(possible_class_key, possible_class)
+                        class_name = this_class.get('title', this_class.get('longTitle', None))
+                        teacher = this_class.get('fullTeacher', this_class.get('teacher', None))
+                        calendar.add_class(
+                            class_name,
+                            teacher,
+                            info['room'],
+                            curr_day,
+                            start,
+                            end
+                        )
+                print("All classes added", curr_day)
+            except Exception:
+                pass
         calendar.write_to('test.ics')
         return f'ICS here, Bearer {access_token[0]}'
     # Normal access
@@ -267,6 +249,10 @@ def root():
 @app.errorhandler(404)
 def handle_404(e):
     return flask.redirect(MAIN)
+
+@app.route('/favicon.ico')
+def favicon():
+    return flask.redirect(f"{MAIN}static/favicon.ico")
 
 webbrowser.open(MAIN)
 app.run(host = '127.0.0.1', port = PORT)
