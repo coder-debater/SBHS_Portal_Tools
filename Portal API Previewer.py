@@ -17,7 +17,7 @@ code_verifier: str = ""
 code_challenge: str = ""
 state: str = ""
 
-def pkce_reset() -> None:
+def auth() -> str:
     global state, code_verifier, code_challenge
     state = secrets.token_urlsafe()
     code_verifier = secrets.token_urlsafe()
@@ -26,16 +26,13 @@ def pkce_reset() -> None:
     ).digest()
     encoded: bytes = base64.urlsafe_b64encode(hashed)
     code_challenge = encoded.decode('utf-8').rstrip('=')
-pkce_reset()
-
-def auth() -> str:
     return f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={CLIENT_ID}&redirect_uri=http://localhost:5050/&scope=all-ro&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
 
 @app.route('/')
 def root() -> str | flask.Response:
     global access_token
     if (( flask.request.args.get('state')) and
-          ( flask.request.args.get('state') != state[0])):
+          ( flask.request.args.get('state') != state)):
         # Wrong state
         return flask.redirect(MAIN)
     elif access_token:
@@ -45,11 +42,9 @@ def root() -> str | flask.Response:
     elif flask.request.args.get('reset'):
         # Reset
         access_token = ''
-        pkce_reset()
     elif flask.request.args.get('code'):
         # Authenticated
         try:
-            assert flask.request.args.get('state') == state
             resp: requests.Response = requests.post(
                 "https://student.sbhs.net.au/api/token",
             data = {

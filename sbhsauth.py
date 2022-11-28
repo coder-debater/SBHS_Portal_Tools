@@ -94,11 +94,11 @@ class SessionBase(object):
         return self._state != returned_state
 
 class PkceSession(SessionBase):
-    """OAuth 2.0 Wrapper for SBHS Portal API (pkce)"""
+    """OAuth 2.0 Wrapper for SBHS Portal API (PKCE)"""
     _code_verifier: str
     _code_challenge: str
     def __init__(self) -> None:
-        """OAuth 2.0 Wrapper for SBHS Portal API (pkce)"""
+        """OAuth 2.0 Wrapper for SBHS Portal API (PKCE)"""
         super(PkceSession, self).__init__()
         self._code_verifier: str = secrets.token_urlsafe()
         hashed: bytes = hashlib.sha256(
@@ -137,9 +137,10 @@ class PkceSession(SessionBase):
             'code_challenge': self._code_challenge,
             'code_verifier': self._code_verifier
         })
-def auth_pkce(*args, **kwargs) -> tuple[PkceSession, str]:
+def auth_pkce(id_: str, redir_uri: str, scope: str = 'all-ro') -> tuple[PkceSession, str]:
+    """Generate an authentication link using PKCE"""
     pkce_session = PkceSession()
-    return pkce_session, pkce_session.auth(*args, **kwargs)
+    return pkce_session, pkce_session.auth(id_, redir_uri, scope)
 
 class SecretSession(SessionBase):
     """OAuth 2.0 Wrapper for SBHS Portal API (App Secret)"""
@@ -194,15 +195,17 @@ class SecretSession(SessionBase):
             return True
         except Exception:
             return False
-def auth_secret(*args, **kwargs) -> tuple[SecretSession, str]:
+def auth_secret(id_: str, secret: str, redir_uri: str, scope: str = 'all-ro') -> tuple[SecretSession, str]:
+    """Generate an authentication link using a client secret"""
     secret_session = SecretSession()
-    return secret_session, secret_session.auth(*args, **kwargs)
+    return secret_session, secret_session.auth(id_, secret, redir_uri, scope = 'all-ro')
 
 function = type(auth_secret)
 
 def _func() -> list[function, function, function]:
     default: list | None = None
     def init(*args) -> None:
+
         nonlocal default
         default = args
     def deinit() -> None:
