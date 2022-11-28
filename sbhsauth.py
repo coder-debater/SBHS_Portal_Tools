@@ -59,7 +59,7 @@ class SessionBase(object):
     def call_api(self, path: str, auth: bool = True) -> tuple[bytes, int] | bool:
         """
         Call the Student Portal API.
-        If access token is gone, return False
+        If access token is gone, return False (if authorisation required)
         If response is empty, return True
         Otherwise, return content
         """
@@ -175,26 +175,15 @@ class SecretSession(SessionBase):
         Upon success, returns True and stores token info
         Upon failure, returns False
         """
-        if self._state != returned_state:
+        if self._check(returned_state):
             return False
-        resp: requests.Response = requests.post(
-            "https://student.sbhs.net.au/api/token",
-        data = {
+        return self._token({
             'grant_type': "authorization_code",
             'code': auth_code,
             'redirect_uri': self._redir_uri,
             'client_id': self._id,
             'client_secret': self.__secret,
-        }, headers = {
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         })
-        try:
-            token = resp.json()
-            self.access_token = token['access_token']
-            self.refresh_token = token['refresh_token']
-            return True
-        except Exception:
-            return False
 def auth_secret(id_: str, secret: str, redir_uri: str, scope: str = 'all-ro') -> tuple[SecretSession, str]:
     """Generate an authentication link using a client secret"""
     secret_session = SecretSession()
