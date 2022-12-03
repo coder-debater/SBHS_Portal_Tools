@@ -29,6 +29,29 @@ def auth() -> str:
     code_challenge = encoded.decode('utf-8').rstrip('=')
     return f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={CLIENT_ID}&redirect_uri=http://localhost:5050/&scope=all-ro&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
 
+def post_token(data_: dict) -> tuple[bool, dict | tuple[str, Exception, requests.Response | bytes] | None]:
+    try:
+        resp: requests.Response = requests.post(
+            "https://student.sbhs.net.au/api/token",
+        data = data_, headers = {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        })
+        resp.raise_for_status()
+    except Exception, e:
+        return False, ('cannot POST endpoint', e, resp)
+    try:
+        resp_json: dict = resp.json()
+    except Exception as e:
+        return False, ('invalid JSON', e, resp.content)
+    if 'access_token' not in resp_json:
+        return False, resp_json
+    if 'refresh_token' not in resp_json:
+        return False, resp_json
+    global access_token, refresh_token
+    access_token = str(resp_json['access_token'])
+    refresh_token = str(resp_json['refresh_token'])
+    return True, None
+
 @app.route('/')
 def root() -> str | flask.Response:
     global access_token, refresh_token
@@ -45,51 +68,39 @@ def root() -> str | flask.Response:
         access_token = ''
     elif flask.request.args.get('code'):
         # Authenticated
-        try:
-            resp: dict = requests.post(
-                "https://student.sbhs.net.au/api/token",
-            data = {
-                'grant_type': "authorization_code",
-                'code': flask.request.args.get('code'),
-                'redirect_uri': MAIN,
-                'client_id': CLIENT_ID,
-                'code_challenge': code_challenge,
-                'code_verifier': code_verifier
-            }, headers = {
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            }).json()
-            access_token = str(resp['access_token'])
-            refresh_token = str(resp['refresh_token'])
+        success: bool
+        resp_opt: dict | str | None
+        
+        success, resp_opt = post_token({
+            'grant_type': "authorization_code",
+            'code': flask.request.args.get('code'),
+            'redirect_uri': MAIN,
+            'client_id': CLIENT_ID,
+            'code_challenge': code_challenge,
+            'code_verifier': code_verifier
+        }, headers = {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        })
+        if success:
             return flask.redirect(MAIN)
-        except Exception:
-            pass
+        print("Fail -", resp_opt)
     return flask.redirect(auth())
 
 @app.route('/refresh')
 def refresh() -> str | flask.Response:
     if not refresh_token:
         return "Not authenticated"
-    try:
-        resp: dict = requests.post(
-            'https://student.sbhs.net.au/api/token',
-        data = {
-            'grant_type': 'refresh_token',
-            'refresh_token': refresh_token,
-            'client_id': CLIENT_ID
-        }).json()
-        if 'access_token' not in resp:
-            print(resp)
-            raise KeyError('access_token not in response')
-        if 'refresh_token' not in resp:
-            print(resp)
-            raise KeyError('refresh_token not in response')
-        global access_token, refresh_token
-        access_token = str(resp['access_token'])
-        refresh_token = str(resp['refresh_token'])
+    success: bool
+    resp_opt: dict | str | None
+    success, resp_opt = post_token({
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token,
+        'client_id': CLIENT_ID
+    })
+    if success:
         return flask.redirect(MAIN)
-    except Exception as e:
-        print(e)
-        return "Error while refreshing access token"
+    print("Fail -", resp_opt)
+    return "Unable to refresh access token"
 
 @app.errorhandler(404)
 def handle_404(e) -> tuple[bytes, int] | flask.Response:
