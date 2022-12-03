@@ -46,7 +46,7 @@ def root() -> str | flask.Response:
     elif flask.request.args.get('code'):
         # Authenticated
         try:
-            resp: requests.Response = requests.post(
+            resp: dict = requests.post(
                 "https://student.sbhs.net.au/api/token",
             data = {
                 'grant_type': "authorization_code",
@@ -66,16 +66,30 @@ def root() -> str | flask.Response:
     return flask.redirect(auth())
 
 @app.route('/refresh')
-def refresh() -> flask.Response:
-    resp: requests.Response = requests.post(
-        'https://student.sbhs.net.au/api/token',
-    data = {
-        'grant_type': 'refresh_token',
-        'refresh_token': refresh_token,
-        'client_id': CLIENT_ID
-    })
-    access_token = str(resp['access_token'])
-    return flask.redirect(MAIN)
+def refresh() -> str | flask.Response:
+    if not refresh_token:
+        return "Not authenticated"
+    try:
+        resp: dict = requests.post(
+            'https://student.sbhs.net.au/api/token',
+        data = {
+            'grant_type': 'refresh_token',
+            'refresh_token': refresh_token,
+            'client_id': CLIENT_ID
+        }).json()
+        if 'access_token' not in resp:
+            print(resp)
+            raise KeyError('access_token not in response')
+        if 'refresh_token' not in resp:
+            print(resp)
+            raise KeyError('refresh_token not in response')
+        global access_token, refresh_token
+        access_token = str(resp['access_token'])
+        refresh_token = str(resp['refresh_token'])
+        return flask.redirect(MAIN)
+    except Exception as e:
+        print(e)
+        return "Error while refreshing access token"
 
 @app.errorhandler(404)
 def handle_404(e) -> tuple[bytes, int] | flask.Response:
