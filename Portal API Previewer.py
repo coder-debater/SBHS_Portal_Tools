@@ -13,6 +13,7 @@ app: flask.Flask = flask.Flask('SBHS_Portal_Tools')
 MAIN: str = f"http://localhost:5050/"
 CLIENT_ID: str = "SBHS_Portal_Tools"
 access_token: str = ""
+refresh_token: str = ""
 code_verifier: str = ""
 code_challenge: str = ""
 state: str = ""
@@ -30,7 +31,7 @@ def auth() -> str:
 
 @app.route('/')
 def root() -> str | flask.Response:
-    global access_token
+    global access_token, refresh_token
     if (( flask.request.args.get('state')) and
           ( flask.request.args.get('state') != state)):
         # Wrong state
@@ -58,10 +59,23 @@ def root() -> str | flask.Response:
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             }).json()
             access_token = str(resp['access_token'])
+            refresh_token = str(resp['refresh_token'])
             return flask.redirect(MAIN)
         except Exception:
             pass
     return flask.redirect(auth())
+
+@app.route('/refresh')
+def refresh() -> flask.Response:
+    resp: requests.Response = requests.post(
+        'https://student.sbhs.net.au/api/token',
+    data = {
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token,
+        'client_id': CLIENT_ID
+    })
+    access_token = str(resp['access_token'])
+    return flask.redirect(MAIN)
 
 @app.errorhandler(404)
 def handle_404(e) -> tuple[bytes, int] | flask.Response:
