@@ -78,13 +78,12 @@ class SessionBase(object):
         if content:
             return content, resp.status_code
         return True
-    def _token(self, data: dict, extras: dict = {}) -> bool:
+    def _token(self, data: dict) -> bool:
         try:
             resp: requests.Response = requests.post(
                 "https://student.sbhs.net.au/api/token",
             data = data, headers = {
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-                **extras
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
             })
             token = resp.json()
             self.access_token = token['access_token']
@@ -104,23 +103,21 @@ class SessionBase(object):
         if not self.refresh_token:
             return False
         try:
-            x = self._refresh_data()
-            if not isinstance(x, dict):
-                return False
-            return self._token({
+            h = {
                 'grant_type': "refresh_token",
                 'redirect_uri': self._redir_uri,
                 'scope': self._scope,
                 'refresh_token': self.refresh_token,
                 'client_id': self._id,
-                **x
-            }, self._refresh_extras())
+            }
+            x = self._refresh_data()
+            if x:
+                h.update(x)
+            return self._token(h)
         except Exception:
             return False
-    def _refresh_extras(self) -> dict[str, str]:
-        raise NotImplementedError
-    def _refresh_data(self) -> dict[str, str]:
-        raise NotImplementedError
+    def _refresh_data(self) -> dict[str, str] | None:
+        raise None
 class PkceSession(SessionBase):
     """OAuth 2.0 Wrapper for SBHS Portal API (PKCE)"""
     _code_verifier: str
@@ -138,7 +135,7 @@ class PkceSession(SessionBase):
         self,
         id_: str,
         redir_uri: str,
-        scope: str = 'all-ro'
+        scope: str | None = None
     ) -> str:
         """
         Return authentication link.
@@ -146,6 +143,8 @@ class PkceSession(SessionBase):
         """
         self._id = id_
         self._redir_uri = redir_uri
+        if scope is None:
+            self._scope = 'all-ro'
         self._scope = scope
         return f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={id_}&redirect_uri={redir_uri}&scope={scope}&state={self._state}&code_challenge={self._code_challenge}&code_challenge_method=S256"
     def token(self, auth_code: str, returned_state: str) -> bool:
@@ -166,11 +165,7 @@ class PkceSession(SessionBase):
             'code_challenge': self._code_challenge,
             'code_verifier': self._code_verifier
         })
-    def _refresh_extras(self) -> dict[str, str]:
-        raise NotImplementedError
-    def _refresh_data(self) -> dict[str, str]:
-        raise NotImplementedError
-def auth_pkce(id_: str, redir_uri: str, scope: str = 'all-ro') -> tuple[PkceSession, str]:
+def auth_pkce(id_: str, redir_uri: str, scope: str | None = None) -> tuple[PkceSession, str]:
     """Generate an authentication link using PKCE"""
     pkce_session = PkceSession()
     return pkce_session, pkce_session.auth(id_, redir_uri, scope)
@@ -188,7 +183,7 @@ class SecretSession(SessionBase):
         id_: str,
         secret: str,
         redir_uri: str,
-        scope: str = 'all-ro'
+        scope: str | None = None
     ) -> str:
         """
         Return authentication link.
@@ -197,6 +192,8 @@ class SecretSession(SessionBase):
         self._id = id_
         self._redir_uri = redir_uri
         self.__secret = secret
+        if scope is None:
+            self._scope = 'all-ro'
         self._scope = scope
         return f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={id_}&redirect_uri={redir_uri}&state={self._state}&scope={scope}"
     def token(self, auth_code: str, returned_state: str) -> bool:
@@ -216,19 +213,12 @@ class SecretSession(SessionBase):
             'redirect_uri': self._redir_uri,
             'client_secret': self.__secret,
         })
-    def _refresh_extras(self) -> dict[str, str]:
+    def _refresh_data(self) -> dict[str, str] | None:
         return {'client_secret': self.__secret}
-    def _refresh_data(self) -> dict[str, str]:
-        x = f'Basic {self.__secret}'
-        return {
-            'Authorisation': x,
-            'Authorization': x,
-            'scope': self._scope
-        }
-def auth_secret(id_: str, secret: str, redir_uri: str, scope: str = 'all-ro') -> tuple[SecretSession, str]:
+def auth_secret(id_: str, secret: str, redir_uri: str, scope: str | None = None) -> tuple[SecretSession, str]:
     """Generate an authentication link using a client secret"""
     secret_session = SecretSession()
-    return secret_session, secret_session.auth(id_, secret, redir_uri, scope = 'all-ro')
+    return secret_session, secret_session.auth(id_, secret, redir_uri, scope = scope)
 
 function = type(auth_secret)
 
