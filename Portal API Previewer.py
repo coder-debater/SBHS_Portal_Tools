@@ -3,6 +3,7 @@ Preview the Portal API (authenticated)
 """
 
 import base64
+import functools
 import hashlib
 import flask
 import webbrowser
@@ -13,6 +14,7 @@ app: flask.Flask = flask.Flask('SBHS_Portal_Tools')
 MAIN: str = f"http://localhost:5050/"
 CLIENT_ID: str = "SBHS_Portal_Tools"
 access_token: str = ""
+refresh_token: str = ""
 code_verifier: str = ""
 code_challenge: str = ""
 state: str = ""
@@ -44,13 +46,37 @@ def post_token(data_: dict) -> tuple[bool, dict | tuple[str, Exception, requests
         return False, ('invalid JSON', e, resp.content)
     if 'access_token' not in resp_json:
         return False, resp_json
-    global access_token
+    if 'refresh_token' not in resp_json:
+        return False, resp_json
+    global access_token, refresh_token
     access_token = str(resp_json['access_token'])
+    refresh_token = str(resp_json['refresh_token'])
     return True, None
 
-@app.route('/')
+def _gen(format_str: str):
+    def template_route(route):
+        def wrapper(func):
+            @functools.wraps(func)
+            def inner(*args, **kwargs):
+                res = func(*args, **kwargs)
+                if isinstance(res, str):
+                    return flask.render_template_string(format_str, string = res)
+                return res
+            if route is None:
+                return inner
+            app.add_url_rule(route, None, inner)
+        return wrapper
+    template_route.__name__ = "template_route"
+    template_route.__qualname__ = "template_route"
+    return template_route
+template_route = _gen("""<!DOCTYPE html><html><head><title>Portal API Previewer</title></head><body><pre>{{string}}</pre></body></html>""")
+del _gen
+def convert(s: str):
+    return template_route(None)(lambda:s)()
+
+@template_route('/')
 def root() -> str | flask.Response:
-    global access_token
+    global access_token, refresh_token
     if (( flask.request.args.get('state')) and
           ( flask.request.args.get('state') != state)):
         # Wrong state
@@ -66,6 +92,7 @@ def root() -> str | flask.Response:
         # Authenticated
         success: bool
         resp_opt: dict | str | None
+        
         success, resp_opt = post_token({
             'grant_type': "authorization_code",
             'code': flask.request.args.get('code'),
@@ -78,12 +105,29 @@ def root() -> str | flask.Response:
         print("Fail -", resp_opt)
     return flask.redirect(auth())
 
-@app.route('/tokens')
+@template_route('/refresh')
+def refresh() -> str | flask.Response:
+    if not refresh_token:
+        return "Not authenticated"
+    success: bool
+    resp_opt: dict | str | None
+    success, resp_opt = post_token({
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token,
+        'client_id': CLIENT_ID,
+        'code_verifier': code_verifier
+    })
+    if success:
+        return "Success"
+    print("Fail -", resp_opt)
+    return "Unable to refresh access token"
+
+@template_route('/tokens')
 def tokens() -> str:
     return "Not implemented"
 
 @app.errorhandler(404)
-def handle_404(e) -> tuple[bytes, int] | flask.Response:
+def handle_404(e) -> flask.Response:
     if not access_token:
         return flask.redirect(auth())
     path: str = flask.request.full_path.lstrip('/')
@@ -93,8 +137,18 @@ def handle_404(e) -> tuple[bytes, int] | flask.Response:
         'Authorization': f"Bearer {access_token}",
     })
     if not resp.content:
-        return b"No content :(", 200
-    return resp.content, resp.status_code
+        return flask.Response(
+            convert('Empty response'), 200,
+            {'Content-Type': 'text/plain; charset=UTF-8'}
+    if 'Content-Type' in resp.headers:
+        return flask.Response(resp.text, resp.status_code, {
+            'Content-Type': resp.headers['Content-Type']
+        })
+    if 'content-type' in resp.headers:
+        return flask.Response(resp.text, resp.status_code, {
+            'Content-Type': resp.headers['content-type']
+        })
+    return flask.Response(resp.text, resp.status_code)
 
 @app.route('/favicon.ico')
 def favicon() -> flask.Response:
