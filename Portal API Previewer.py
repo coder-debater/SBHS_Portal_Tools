@@ -36,7 +36,7 @@ def post_token(data_: dict) -> tuple[bool, dict | tuple[str, Exception, requests
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         })
         resp.raise_for_status()
-    except Exception, e:
+    except Exception as e:
         return False, ('cannot POST endpoint', e, resp)
     try:
         resp_json: dict = resp.json()
@@ -71,13 +71,16 @@ def root() -> str | flask.Response:
             'code': flask.request.args.get('code'),
             'redirect_uri': MAIN,
             'client_id': CLIENT_ID,
-            'code_challenge': code_challenge,
             'code_verifier': code_verifier
         })
         if success:
             return flask.redirect(MAIN)
         print("Fail -", resp_opt)
     return flask.redirect(auth())
+
+@app.route('/tokens')
+def tokens() -> str:
+    return "Not implemented"
 
 @app.errorhandler(404)
 def handle_404(e) -> tuple[bytes, int] | flask.Response:
