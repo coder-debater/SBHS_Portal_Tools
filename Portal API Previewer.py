@@ -140,6 +140,7 @@ def handle_404(e) -> flask.Response:
         return flask.Response(
             convert('Empty response'), 200,
             {'Content-Type': 'text/plain; charset=UTF-8'}
+        )
     if 'Content-Type' in resp.headers:
         return flask.Response(resp.text, resp.status_code, {
             'Content-Type': resp.headers['Content-Type']
