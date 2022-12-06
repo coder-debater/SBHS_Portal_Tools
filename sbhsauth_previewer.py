@@ -3,6 +3,8 @@ Preview the portal, written using my sbhsauth library
 Less than half of lines needed
 """
 
+# ! TODO: Update this for the new previewer
+
 import flask
 import webbrowser
 from sbhsauth import PkceSession as Session
