@@ -98,7 +98,6 @@ def root() -> str | flask.Response:
             'code': flask.request.args.get('code'),
             'redirect_uri': MAIN,
             'client_id': CLIENT_ID,
-            'code_challenge': code_challenge,
             'code_verifier': code_verifier
         })
         if success:
@@ -123,8 +122,12 @@ def refresh() -> str | flask.Response:
     print("Fail -", resp_opt)
     return "Unable to refresh access token"
 
+@template_route('/tokens')
+def tokens() -> str:
+    return "Not implemented"
+
 @app.errorhandler(404)
-def handle_404(e) -> tuple[bytes, int] | flask.Response:
+def handle_404(e) -> flask.Response:
     if not access_token:
         return flask.redirect(auth())
     path: str = flask.request.full_path.lstrip('/')
@@ -134,7 +137,9 @@ def handle_404(e) -> tuple[bytes, int] | flask.Response:
         'Authorization': f"Bearer {access_token}",
     })
     if not resp.content:
-        return convert("No content :("), 200
+        return flask.Response(
+            convert('Empty response'), 200,
+            {'Content-Type': 'text/plain; charset=UTF-8'}
     if 'Content-Type' in resp.headers:
         return flask.Response(resp.text, resp.status_code, {
             'Content-Type': resp.headers['Content-Type']
