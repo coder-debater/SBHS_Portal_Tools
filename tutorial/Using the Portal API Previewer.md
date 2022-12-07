@@ -3,11 +3,13 @@
 Test text
 1. hello
 2. 3
- [ ] hi
- [x] no
+3. ok
+4. ok
+5. ok
 
- * no
- * yes
-
- - [ ] yep
- - [x] done
+1. [ ] hi
+1. [x] ok
+1. [ ] x
+1. [ ] x
+1. [ ] x
+1. [ ] new
