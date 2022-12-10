@@ -100,8 +100,14 @@ def template_route(route) -> types.FunctionType:
         app.add_url_rule(route, None, inner)
     return wrapper
 
-def convert(s: str):
-    return template_route(None)(lambda:s)()
+def convert(s: str, status: int = 200, mimetype: str = "text/html", raw2: str = "</pre>", **kwargs) -> flask.Response:
+    return flask.Response(
+        flask.render_template_string(
+            INFO_FORMAT_STRING,
+        string = s, raw2 = raw2, **kwargs),
+        status,
+        {"Content-Type": f"{mimetype}; charset=UTF-8"}
+    )
 
 @template_route("/")
 def root() -> str | flask.Response:
@@ -166,9 +172,11 @@ def handle_404(e) -> flask.Response:
         "Authorization": f"Bearer {access_token}",
     })
     if not resp.content:
-        return flask.Response(
-            convert("Empty response"), 200,
-            {"Content-Type": "text/plain; charset=UTF-8"}
+        print(resp.headers)
+        return convert(
+            f"Empty response, status code {resp.status_code}",
+            raw1 = "</pre><p><pre>",
+            mid = str(resp.headers)
         )
     if "Content-Type" in resp.headers:
         return flask.Response(resp.text, resp.status_code, {
