@@ -4,4 +4,4 @@ __pycache__/
 **/__pycache__/
 *.pyc
 **/*.pyc
-tester_list.txt
+tester_list.csv
