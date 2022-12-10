@@ -5,19 +5,43 @@ Preview the Portal API (authenticated)
 import base64
 import functools
 import hashlib
+import types
+import typing
 import flask
 import webbrowser
 import requests
 import secrets
 
-app: flask.Flask = flask.Flask("SBHS_Portal_Tools")
-MAIN: str = f"http://localhost:5050/"
+FOLDER_NAME = "SBHS_Portal_Tools"
+PORT: int = 5050
+MAIN: str = f"http://localhost:{PORT}/"
 CLIENT_ID: str = "SBHS_Portal_Tools"
+INFO_FORMAT_STRING: str = """<!DOCTYPE html><html><head><title>Portal API Previewer</title><style>
+
+/* https://css-tricks.com/snippets/css/make-pre-text-wrap/ */
+
+pre {
+ white-space: pre-wrap;       /* css-3 */
+ white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+ white-space: -pre-wrap;      /* Opera 4-6 */
+ white-space: -o-pre-wrap;    /* Opera 7 */
+ word-wrap: break-word;       /* Internet Explorer 5.5+ */
+}
+
+</style></head><body>
+
+<h1>Portal API Previewer</h1>
+<pre>{{ string|e }}{{ raw1|safe }}{{ mid|e }}{{ raw2|safe }}
+
+</body></html>"""
+
 access_token: str = ""
 refresh_token: str = ""
 code_verifier: str = ""
 code_challenge: str = ""
 state: str = ""
+
+app: flask.Flask = flask.Flask(FOLDER_NAME)
 
 def auth() -> str:
     global state, code_verifier, code_challenge
@@ -28,7 +52,7 @@ def auth() -> str:
     ).digest()
     encoded: bytes = base64.urlsafe_b64encode(hashed)
     code_challenge = encoded.decode("utf-8").rstrip("=")
-    return f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={CLIENT_ID}&redirect_uri=http://localhost:5050/&scope=all-ro&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
+    return f"https://student.sbhs.net.au/api/authorize?response_type=code&client_id={CLIENT_ID}&redirect_uri=http://localhost:{PORT}/&scope=all-ro&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
 
 def post_token(data_: dict) -> tuple[bool, dict | tuple[str, Exception, requests.Response | bytes] | None]:
     try:
@@ -53,28 +77,28 @@ def post_token(data_: dict) -> tuple[bool, dict | tuple[str, Exception, requests
     refresh_token = str(resp_json["refresh_token"])
     return True, None
 
-def _gen(format_str: str):
-    def template_route(route):
-        def wrapper(func):
-            @functools.wraps(func)
-            def inner(*args, **kwargs):
-                res = func(*args, **kwargs)
-                if isinstance(res, str):
-                    return flask.render_template_string(format_str, string = res)
+def template_route(route) -> types.FunctionType:
+    def wrapper(func) -> types.FunctionType | None:
+        @functools.wraps(func)
+        def inner(*args, **kwargs) -> flask.Response:
+            res: typing.Any = func(*args, **kwargs)
+            args: tuple = ()
+            if isinstance(res, flask.Response):
                 return res
-            if route is None:
-                return inner
-            app.add_url_rule(route, None, inner)
-        return wrapper
-    template_route.__name__ = "template_route"
-    template_route.__qualname__ = "template_route"
-    return template_route
-template_route = _gen("""<!DOCTYPE html><html><head><title>Portal API Previewer</title></head><body>
-
-<h1>Portal API Previewer</h1>
-<pre>{{string}}</pre>
-
-</body></html>""")
+            elif isinstance(res, tuple):
+                res, *args = res
+            else:
+                args = None
+            res = flask.render_template_string(INFO_FORMAT_STRING, string = res)
+            if args:
+                return flask.Response(
+                    res, *args
+                )
+            return flask.Response(res)
+        if route is None:
+            return inner
+        app.add_url_rule(route, None, inner)
+    return wrapper
 
 del _gen
 def convert(s: str):
@@ -159,8 +183,8 @@ def handle_404(e) -> flask.Response:
 
 @app.route("/favicon.ico")
 def favicon() -> flask.Response:
-    return flask.redirect("http://localhost:5050/static/favicon.ico")
+    return flask.redirect(f"http://localhost:{PORT}/static/favicon.ico")
 
 webbrowser.open(auth())
 if __name__ == "__main__":
-    app.run(host = "127.0.0.1", port = 5050)
+    app.run(host = "127.0.0.1", port = PORT)
