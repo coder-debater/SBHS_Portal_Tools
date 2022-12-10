@@ -100,7 +100,6 @@ def template_route(route) -> types.FunctionType:
         app.add_url_rule(route, None, inner)
     return wrapper
 
-del _gen
 def convert(s: str):
     return template_route(None)(lambda:s)()
 
