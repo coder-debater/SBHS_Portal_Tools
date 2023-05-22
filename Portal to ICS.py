@@ -48,8 +48,8 @@ class Calendar(object):
         formatted: str = day.strftime('%A')[:2].upper()
         self._sub.append(type(self)(attrs = {
             'SUMMARY': class_name,
-            'DESCRIPTION': f"{class_name} class - {teacher}",
-            "LOCATION": room,
+            'DESCRIPTION': f"{class_name} in {room} with {teacher}",
+            "LOCATION": f"{room} with {teacher}",
             "DTSTART": start,
             "DTEND": self.format_dt(day + end_time),
             "DTSTAMP": start,
